@@ -122,6 +122,30 @@ its LEDs.
 
 Regenerate them with `node tools/gen-profiles.mjs`.
 
+### Generic devices
+
+Anything that speaks MIDI or OSC works, whether or not it has a profile here.
+
+**MIDI.** Start on `generic-learn`, pick the input from the header (or `--midi`, which
+takes an exact name, a case-insensitive substring, or an index — `--midi apc` and
+`--midi 1` both work), then bind controls by touching them. A profile with a
+`match.namePattern` finds its own port; a generic one has nothing to match on, so with a
+single input attached it just opens it, and with several it **refuses to guess** and
+lists them rather than picking the wrong controller.
+
+**OSC.** Send to `--osc-in` from any layout — TouchOSC, a lighting desk, Companion. The
+addresses are yours: `osc-default` is only a starting layout, and learn binds whatever
+address arrives. Feedback goes back out on the same address, so a tablet fader tracks the
+switcher.
+
+Both go through the same **Bring-up** view, and both get classified. OSC carries no hint
+of what a control *is* — the same address is a fader or a button depending only on how
+it is declared — so the value shape decides: only ever `0`/`1` or booleans is a button,
+anything that visits the middle is a fader.
+
+If no MIDI binding is installed there is no hardware I/O at all; the header says so and
+the on-screen surface still works. `npm i @julusian/midi` enables it.
+
 ## The parameter catalogue
 
 `core/catalogue.json` is generated from a device, joining two sources because neither is

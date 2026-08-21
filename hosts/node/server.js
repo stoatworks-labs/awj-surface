@@ -436,12 +436,18 @@ class Host {
 
   /* --------------------------------------------------------------- MIDI */
 
-  async openMidi(profile) {
+  async openMidi(profile, overrideName) {
+    if (overrideName !== undefined) this.opts.midi = overrideName || null;
     this.port = await openPort({
       name: this.opts.midi,
       pattern: profile.match?.namePattern
     });
-    this.status.midi = { name: this.port.name, type: this.port.type };
+    this.status.midi = {
+      name: this.port.name,
+      type: this.port.type,
+      reason: this.port.reason ?? null,
+      candidates: this.port.candidates ?? []
+    };
     this.surface = new MidiSurface(profile, (bytes) => this.port.send(bytes));
 
     this.port.on('message', (bytes) => this.onMidi(bytes));
@@ -455,9 +461,17 @@ class Host {
     }
     this.surface.reset();
 
-    this.say('info', this.port.type === 'hardware'
-      ? `MIDI port: ${this.port.name}`
-      : `no MIDI hardware: using a virtual port (${this.port.name}). The on-screen surface drives it.`);
+    if (this.port.type === 'hardware') {
+      this.say('info', `MIDI in: ${this.port.name}${this.port.reason ? ` (${this.port.reason})` : ''}`);
+    } else {
+      /* Never silent about falling back: a virtual port looks exactly like a
+         controller that is plugged in and ignoring you. */
+      this.say('warn', `virtual MIDI port — ${this.port.reason ?? 'no hardware matched'}`);
+      for (const c of this.port.candidates ?? []) {
+        this.say('info', `  available: [${c.index}] ${c.name}   (--midi ${c.index})`);
+      }
+      this.say('info', 'the on-screen surface drives the virtual port');
+    }
   }
 
   onMidi(bytes) {
@@ -483,15 +497,21 @@ class Host {
   observe(event, bytes) {
     let hit = this.seen.get(event.control);
     if (!hit) {
-      hit = { count: 0, kind: event.kind, samples: [] };
+      hit = { count: 0, kind: event.kind, transport: event.osc ? 'osc' : 'midi', samples: [] };
       this.seen.set(event.control, hit);
     }
     hit.count++;
     hit.last = Date.now();
-    if (hit.samples.length < 24) {
-      const decoded = decode(bytes);
-      if (decoded) hit.samples.push({ type: decoded.type, value: decoded.value, velocity: decoded.velocity });
+    if (hit.samples.length >= 24) return;
+
+    if (event.osc) {
+      /* An OSC argument is already a value, so it is recorded as one. There is
+         no byte stream to decode and no relative encoding to detect. */
+      hit.samples.push({ type: 'osc', value: event.args?.[0] });
+      return;
     }
+    const decoded = decode(bytes);
+    if (decoded) hit.samples.push({ type: decoded.type, value: decoded.value, velocity: decoded.velocity });
   }
 
   /* ---------------------------------------------------------------- OSC */
@@ -516,9 +536,16 @@ class Host {
   onOsc(msg) {
     const id = oscControlId(msg.address);
     const control = this.engine.controls.get(id);
+    /*
+     * OSC goes through the same observation path as MIDI, so an OSC surface
+     * gets the same bring-up checklist. A TouchOSC layout is every bit as
+     * likely to disagree with its profile as a transcribed MIDI chart — more
+     * so, since the addresses are whatever whoever drew the layout typed.
+     */
+    this.observe({ control: id, kind: control?.kind ?? 'unmapped', osc: true, args: msg.args });
     this.broadcast({ type: 'osc-in', address: msg.address, args: msg.args, mapped: !!control });
     if (this.learn) {
-      this.finishLearn({ control: id, kind: control ? 'known' : 'unmapped', osc: true });
+      this.finishLearn({ control: id, kind: control ? 'known' : 'unmapped', osc: true, args: msg.args });
       return;
     }
     if (!control) return;
@@ -591,6 +618,20 @@ class Host {
 function guessKind(event) {
   if (event.control?.startsWith('note:')) return 'button';
   if (event.control?.startsWith('pb:')) return 'fader14';
+  if (event.control?.startsWith('osc:')) {
+    /*
+     * OSC carries no hint of what a control IS — the same address is a fader
+     * or a button depending only on how it is declared. The argument is the
+     * one clue available: surfaces send booleans, or exactly 0/1, for buttons
+     * and a continuous value for anything that slides. Defaulting everything
+     * to `fader` made every learned OSC button a fader that could only ever
+     * write its maximum.
+     */
+    const arg = event.args?.[0];
+    if (arg === undefined || typeof arg === 'boolean') return 'button';
+    if (arg === 0 || arg === 1) return 'button';
+    return 'fader';
+  }
   return 'fader';
 }
 
@@ -701,6 +742,15 @@ function createServer(host) {
             host.resubscribe();
             host.engine.refresh();
             return json(res, 200, { ok: true });
+          }
+          case '/api/port': {
+            /* Switching input at runtime, so a generic surface can be picked
+               from the UI rather than by restarting with a flag. */
+            host.port?.close();
+            await host.openMidi(host.engine.profile, body.name);
+            host.broadcast({ type: 'status', status: host.status });
+            host.engine.refresh();
+            return json(res, 200, { ok: true, midi: host.status.midi });
           }
           case '/api/profile': {
             const profile = await host.loadProfile(body.id);

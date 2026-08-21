@@ -72,6 +72,22 @@ test('classify recognises notes and pitch bend outright', () => {
   assert.equal(classify([]).kind, null);
 });
 
+test('classify handles OSC, where the value shape is the only clue', () => {
+  /* OSC says nothing about what a control is — the same address is a fader or
+     a button depending only on how it is declared. */
+  const held = [{ type: 'osc', value: 1 }, { type: 'osc', value: 0 }, { type: 'osc', value: 1 }];
+  assert.equal(classify(held).kind, 'button', 'only ever the two ends');
+
+  const bools = [{ type: 'osc', value: true }, { type: 'osc', value: false }];
+  assert.equal(classify(bools).kind, 'button');
+
+  const bare = [{ type: 'osc', value: undefined }];
+  assert.equal(classify(bare).kind, 'button', 'a momentary tap sends a bare address');
+
+  const slide = [0.05, 0.2, 0.4, 0.63, 0.9].map((v) => ({ type: 'osc', value: v }));
+  assert.equal(classify(slide).kind, 'fader', 'visits the middle, so it slides');
+});
+
 test('summarise reads as a sentence', () => {
   const c = coverage(profile, new Map([['cc:0:7', { count: 1 }], ['cc:9:9', { count: 1 }]]));
   assert.equal(summarise(c), '1/3 controls confirmed, 2 never seen, 1 not in the profile');

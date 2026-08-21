@@ -123,27 +123,89 @@ export async function listPorts() {
 }
 
 /**
- * Open the port a profile asks for.
+ * Decide which attached port to open.
  *
- * A profile's `match.namePattern` is tried against the attached ports, which is
- * what makes "plug in the X-Touch and it works" possible. Falling back to a
- * virtual port is deliberate: a surface that is not plugged in should not stop
- * the rest of the tool from running.
+ * Pure, so it can be tested without a MIDI binding or any hardware.
+ *
+ * The generic case is the one that matters. A profile written for a specific
+ * surface carries a `match.namePattern` and finds itself; a *generic* profile
+ * carries none, and the original code then matched nothing and silently handed
+ * back a virtual port — so plugging in an unlisted controller and choosing the
+ * generic profile produced a surface that looked connected and was deaf.
+ *
+ * With nothing to match on:
+ *   one port   open it. There is no ambiguity and no reason to ask.
+ *   several    do not guess. Which controller is "the" controller is the
+ *              user's call, and picking the wrong one wastes their time in a
+ *              way that is hard to diagnose. Report the candidates instead.
+ *   none       virtual, as before.
+ *
+ * `name` accepts an exact name, a case-insensitive substring, or an index, so
+ * `--midi 1` and `--midi apc` both work.
+ */
+export function chooseInput(ports, { name, pattern } = {}) {
+  if (!ports.length) return { port: null, reason: 'no MIDI inputs attached' };
+
+  if (name !== undefined && name !== null && name !== '') {
+    const exact = ports.find((p) => p.name === name);
+    if (exact) return { port: exact };
+    if (/^\d+$/.test(String(name))) {
+      const byIndex = ports[Number(name)];
+      if (byIndex) return { port: byIndex };
+    }
+    const needle = String(name).toLowerCase();
+    const partial = ports.filter((p) => p.name.toLowerCase().includes(needle));
+    if (partial.length === 1) return { port: partial[0] };
+    if (partial.length > 1) {
+      return { port: null, reason: `"${name}" matches ${partial.length} ports`, candidates: partial };
+    }
+    return { port: null, reason: `no MIDI input matches "${name}"`, candidates: ports };
+  }
+
+  if (pattern) {
+    const re = new RegExp(pattern, 'i');
+    const hit = ports.filter((p) => re.test(p.name));
+    if (hit.length) return { port: hit[0] };
+    return { port: null, reason: `no MIDI input matches /${pattern}/i`, candidates: ports };
+  }
+
+  if (ports.length === 1) return { port: ports[0], reason: 'the only input attached' };
+  return {
+    port: null,
+    reason: `${ports.length} MIDI inputs attached — pick one`,
+    candidates: ports
+  };
+}
+
+/**
+ * Open a port, or fall back to a virtual one.
+ *
+ * Falling back is deliberate: a surface that is not plugged in must not stop
+ * the rest of the tool from running. What the fallback must never do is be
+ * silent about it, so the reason travels back on the port itself.
  */
 export async function openPort({ name, pattern } = {}) {
   const backend = await loadBackend();
-  if (!backend) return new VirtualPort(name ?? 'Virtual Surface');
+  if (!backend) {
+    const port = new VirtualPort(name ?? 'Virtual Surface');
+    port.reason = 'no MIDI binding installed (npm i @julusian/midi to enable hardware)';
+    return port;
+  }
 
   const input = new backend.midi.Input();
-  let found = null;
-  for (let i = 0; i < input.getPortCount(); i++) {
-    const portName = input.getPortName(i);
-    if (name ? portName === name : pattern && new RegExp(pattern, 'i').test(portName)) {
-      found = { index: i, name: portName };
-      break;
-    }
-  }
+  const ports = [];
+  for (let i = 0; i < input.getPortCount(); i++) ports.push({ index: i, name: input.getPortName(i) });
   try { input.closePort(); } catch { /* nothing was opened */ }
-  if (!found) return new VirtualPort(name ?? pattern ?? 'Virtual Surface');
-  return new HardwarePort(backend.midi, found.name, found.index);
+
+  const choice = chooseInput(ports, { name, pattern });
+  if (!choice.port) {
+    const port = new VirtualPort(name ?? pattern ?? 'Virtual Surface');
+    port.reason = choice.reason;
+    port.candidates = choice.candidates ?? [];
+    return port;
+  }
+  const port = new HardwarePort(backend.midi, choice.port.name, choice.port.index);
+  port.reason = choice.reason ?? null;
+  port.candidates = ports;
+  return port;
 }

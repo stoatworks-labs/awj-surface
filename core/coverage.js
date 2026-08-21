@@ -85,6 +85,31 @@ export function classify(observations) {
     return { kind: 'fader14', why: '14-bit pitch bend, so a Mackie-style fader' };
   }
 
+  /*
+   * OSC carries no hint of what a control IS — the same address is a fader or a
+   * button depending only on how it is declared. All that is available is the
+   * shape of the values, and the only reliable split is that a button sends
+   * nothing but the two ends while anything that slides visits the middle.
+   */
+  if (kinds.has('osc')) {
+    const args = observations.filter((o) => o.type === 'osc').map((o) => o.value);
+    if (args.every((v) => v === undefined || typeof v === 'boolean')) {
+      return { kind: 'button', why: 'sends booleans, or no argument at all' };
+    }
+    const numeric = args.filter((v) => typeof v === 'number');
+    if (numeric.length && numeric.every((v) => v === 0 || v === 1)) {
+      return { kind: 'button', why: 'only ever 0 or 1' };
+    }
+    if (numeric.length) {
+      const span = Math.max(...numeric) - Math.min(...numeric);
+      return {
+        kind: 'fader',
+        why: span > 0 ? 'continuous values between the ends — a position' : 'a single held value'
+      };
+    }
+    return { kind: 'button', why: 'no numeric argument' };
+  }
+
   const values = observations.filter((o) => o.type === 'cc').map((o) => o.value);
   if (!values.length) return { kind: null, why: 'no usable messages' };
 

@@ -68,6 +68,13 @@ it is that the address a binding resolves to keeps moving.
   `min-height:auto` and refuses to shrink below its content, which silently defeats
   `overflow:auto` and lets the whole document scroll. That took the header, and with it
   the READ-ONLY indicator, off screen.
+- **Never silently fall back to a virtual port.** A virtual port looks exactly like a
+  controller that is plugged in and ignoring you. `openPort` attaches a `reason` and the
+  candidate list, and the UI shows both. With nothing to match on and several inputs
+  attached, `chooseInput` refuses to guess rather than opening the wrong controller.
+- **A `<select>` change is not proof a human changed it.** Browsers restore form values
+  across a reload and can fire `change` while doing so, which had the page silently
+  switching the running profile. Both pickers compare against known state first.
 - **`null` position is not zero.** It means "no value" and a host must leave the control
   alone — blank the LED ring, do not drive it to the bottom.
 

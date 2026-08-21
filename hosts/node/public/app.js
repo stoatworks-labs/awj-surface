@@ -50,6 +50,7 @@ async function boot() {
   $('sel-screen').innerHTML = Array.from({ length: 24 }, (_, i) =>
     `<option ${`S${i + 1}` === data.selection.screen ? 'selected' : ''}>S${i + 1}</option>`).join('');
 
+  await fillPortPicker();
   fillParamPicker();
   for (const entry of data.log) appendLog(entry);
   renderAll();
@@ -104,6 +105,32 @@ function renderAll() {
     `${state.profile.name ?? state.profile.id} · ${state.profile.feedback?.protocol ?? 'generic'} feedback`;
 }
 
+/*
+ * The input picker.
+ *
+ * A profile for a named surface finds its own port, but a generic profile has
+ * nothing to match on — and with several controllers attached the server
+ * deliberately refuses to guess. This is where that gets resolved, without
+ * restarting with a flag.
+ */
+async function fillPortPicker() {
+  const { backend, ports } = await (await fetch('/api/ports')).json();
+  const select = $('midi-port');
+  const current = state.status?.midi?.name;
+
+  if (!backend) {
+    select.innerHTML = '<option>no MIDI binding</option>';
+    select.disabled = true;
+    select.title = 'Install @julusian/midi to talk to hardware; the on-screen surface works regardless';
+    return;
+  }
+  select.disabled = false;
+  select.innerHTML = ['<option value="">auto (match the profile)</option>']
+    .concat(ports.map((p) => `<option value="${esc(p.name)}" ${p.name === current ? 'selected' : ''}>${esc(p.name)}</option>`))
+    .join('');
+  if (!ports.length) select.innerHTML = '<option value="">no inputs attached</option>';
+}
+
 function renderStatus({ lost = false } = {}) {
   const s = state.status ?? {};
   set('dot-awj', s.awj && !lost ? 'on' : s.offline ? 'idle' : '');
@@ -116,6 +143,9 @@ function renderStatus({ lost = false } = {}) {
   $('lbl-device').classList.toggle('ro', !!s.readOnly);
   set('dot-midi', s.midi ? (s.midi.type === 'hardware' ? 'on' : 'idle') : '');
   $('lbl-midi').textContent = s.midi ? s.midi.name : 'no MIDI';
+  /* The reason a virtual port was chosen is the useful part — a virtual port
+     looks exactly like a controller that is plugged in and ignoring you. */
+  $('lbl-midi').title = s.midi?.reason ?? '';
   set('dot-osc', s.osc ? 'on' : '');
   $('lbl-osc').textContent = s.osc ? 'OSC' : 'OSC off';
 }
@@ -207,9 +237,16 @@ const cssEscape = (s) => (window.CSS?.escape ? CSS.escape(s) : String(s).replace
 
 /* --------------------------------------------------------------- events */
 
+$('midi-port').addEventListener('change', async (event) => {
+  const res = await post('/api/port', { name: event.target.value });
+  if (res.midi) { state.status.midi = res.midi; renderStatus(); }
+});
+
 $('profile').addEventListener('change', async (event) => {
   const res = await post('/api/profile', { id: event.target.value });
   if (res.profile) { state.profile = res.profile; renderAll(); }
+  /* A different profile can match a different port. */
+  await fillPortPicker();
 });
 
 for (const [id, field] of [['sel-screen', 'screen'], ['sel-preset', 'preset'], ['sel-layer', 'layer'], ['sel-bank', 'bank']]) {
