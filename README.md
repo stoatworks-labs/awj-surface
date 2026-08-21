@@ -1,0 +1,183 @@
+# awj-surface
+
+> **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
+> (Anthropic), directed and reviewed by a human author. The parameter model and every
+> path in it were read from a live LivePremier, and the whole chain — a fader movement
+> through to an `opacity` write, a TAKE, and the preset flip that follows it — has been
+> **exercised end to end on a real Aquilon C**, with the frame captured beforehand and
+> every one of 87 values verified restored afterwards. But **no physical control surface
+> has ever been plugged into it.** The controller maps come from published documentation,
+> not from hardware. Treat a first run with a real APC40, X-Touch or MIDIcon as bring-up.
+
+Map MIDI and OSC controllers onto an Analog Way **LivePremier** (Aquilon) switcher.
+Faders to layer opacity, encoders to size and position, buttons to select layers, apply
+sources, cycle crop modes and switch keying — with the surface following the switcher,
+not just driving it.
+
+```bash
+node hosts/node/server.js --device 192.168.2.140 --profile x-touch-mcu
+```
+
+Then open <http://127.0.0.1:8532>.
+
+## Read-only mode
+
+Against show hardware you usually want to watch, not drive:
+
+```bash
+node hosts/node/server.js --device 192.168.2.142 --read-only
+```
+
+This is not a flag that skips writes. The AWJ client is built with **no reachable write
+path** — `set()` and `subscribe()` throw, so a `replace` cannot reach the wire even by
+mistake. That includes the **Subscriptions list**, which looks like a read and is not:
+subscribing is a `replace` on the `Subscriptions` path. Because of that there is no
+push, so read-only mode **polls** the mapped paths instead (`--poll <ms>`, default 2000)
+using nothing but `get`.
+
+Control movements are logged as `read-only, NOT sent:` rather than silently dropped, and
+the header shows `READ-ONLY` in amber, because "will this control reach the switcher?"
+must be answerable at a glance.
+
+Run it with no `--device` and everything still works offline: the mapping editor, the
+on-screen surface, and writes logged instead of sent. That is how you build a show file
+before the frame arrives.
+
+## What it does
+
+- **Bidirectional.** Motorised faders track the device, LED rings follow encoders,
+  button lamps show what the layer actually holds, and X-Touch scribble strips name the
+  layer each strip is pointed at. A surface that only sends is half a surface.
+- **MIDI-learn plus JSON profiles.** Four controllers ship mapped from their published
+  MIDI charts; anything else is learned by touching a control. Profiles are plain JSON,
+  so they diff and they travel.
+- **A parameter catalogue with real limits.** 67 layer parameters and 19 screen
+  controls, each with the device's own type, range and enum members — generated from
+  the switcher, not typed from a PDF.
+- **Two hosts, one engine.** A local server (this repo) and a Chrome extension
+  ([hosts/extension](hosts/extension)) share `core/` unchanged.
+
+## The three things that make this harder than a lookup table
+
+**A layer path contains a preset *letter*, and the letter moves.** A screen holds three
+preset memories keyed `A`, `B`, `C`. Nothing addresses "preview" — you address a letter,
+and which letter is on air changes at every take. Bindings therefore say `PREVIEW` or
+`PROGRAM` and are resolved per event against live device state. Get this wrong and a
+preview fader silently becomes a live one halfway through a show.
+
+The rule, confirmed by firing a take and re-reading: the letters do **not** move.
+`status/transition` flips, and every one of its six values names the end the T-bar is at
+or came from — so the whole rule is the `DOWN`/`UP` suffix.
+
+**Every write comes back.** The device echoes changes to all clients, so naive feedback
+drives a motor fader into the hand that just moved it. Writes are attributed, and the
+echo to the originating control is dropped — while a change from anywhere else (the
+vendor UI, a second surface) still moves it.
+
+**A fader that is not motorised lies.** After a bank change it sits where the last layer
+left it, and the first touch would slam the new layer to that value. Non-motorised
+bindings use pickup: no write until the control crosses the value it is steering.
+
+## Controllers
+
+| Profile | Surface | Feedback | Source of the map |
+|---|---|---|---|
+| `x-touch-mcu` | Behringer X-Touch, MC mode | motor faders, LED rings, scribble strips | de-facto Mackie Control |
+| `apc40` | Akai APC40 | button LED colours, knob rings | published APC40 chart |
+| `midicon-pro` | Elation MIDICON PRO | motor faders, button LEDs | [Elation's manual](https://cdb.s3.amazonaws.com/ItemRelatedFiles/9908/ELATION%20MIDICON%20PRO%20-%20USER%20MANUAL.pdf) |
+| `midicon-2` | Elation MIDICON-2 | motor faders, button LEDs | [Elation's manual](http://cdb.s3.amazonaws.com/ItemRelatedFiles/10522/elation_midicon-2_user_manual_010517.pdf) |
+| `osc-default` | TouchOSC and similar | values returned on the same address | — |
+| `generic-learn` | anything | as declared | learned |
+
+Both MIDIcons send **one note per rotary click** rather than a relative CC, so each
+rotary is two controls in its profile. Both take feedback by echo — send a fader's own
+CC back and the motor moves — which is the same `generic` protocol the APC40 uses for
+its LEDs.
+
+Regenerate them with `node tools/gen-profiles.mjs`.
+
+## The parameter catalogue
+
+`core/catalogue.json` is generated from a device, joining two sources because neither is
+enough alone:
+
+- `GET /api/stores/device` — the real tree, with exact node and property names, but no
+  ranges. A store dump cannot tell you that `opacity` stops at **256**.
+- `GET /app.<hash>.js` — the Web RCS bundle, which ships **unminified** with the
+  generator's own `*_ATTRIBUTES` tables: min, max, default, type, `readOnly` and the
+  enum reference for every property.
+
+```bash
+node tools/gen-catalogue.mjs 192.168.2.140 > core/catalogue.json
+```
+
+Nothing in it is hand-written. Every range is the device's own statement about itself,
+which is why `opacity` is 0–256 and not 0–255, `posH` is ±2,000,000, and
+`source.inputNum` has 482 members.
+
+## Ranges, and why bindings narrow them
+
+`position.posH` runs ±2,000,000. Mapped raw onto a 7-bit fader that is **31,500 pixels
+per step**. A binding may therefore narrow the range, and the narrowed range is clamped
+to the parameter's own so a profile cannot ask for the impossible:
+
+```json
+{ "control": "cc:0:16",
+  "target": { "kind": "layer", "layer": "@selected", "preset": "PREVIEW", "param": "position.posH" },
+  "options": { "min": -1920, "max": 3840 } }
+```
+
+The same idea trims an absolute source knob to the 16 live inputs, because 482 members
+across 128 knob positions is not selectable.
+
+## OSC needs the server
+
+OSC is UDP. A browser cannot open a UDP socket and neither can a Manifest V3 extension —
+`chrome.sockets.udp` went away with Chrome Apps. **MIDI can live in the extension; OSC
+cannot live anywhere but the local server.** There is no workaround, only a different
+host.
+
+```bash
+node hosts/node/server.js --device 192.168.2.140 --profile osc-default \
+     --osc-in 8000 --osc-out 9000
+```
+
+Feedback returns to the same address it arrived on, so a tablet fader tracks the
+switcher.
+
+## The Chrome extension
+
+[hosts/extension](hosts/extension) drops the same engine into
+[webRCS unleashed](../webrcs-unleashed), driving the device over the page's own
+WebSocket so no extra client is opened. Web MIDI has to run in an **offscreen document**
+there — `requestMIDIAccess` is a secure-context API and a Web RCS is served over plain
+HTTP, so a content script cannot use it in either world. See that README for the full
+reasoning and the install steps.
+
+## Running without hardware
+
+There is no MIDI binding in the dependency list, because there are no dependencies. If
+`@julusian/midi` or `midi` happens to be installed it is used; otherwise the server
+opens a **virtual port**, and the on-screen surface in the web UI drives it.
+
+That surface is not a mock of the mapping. It imports the same MIDI codec the server
+does, encodes real bytes, and posts them to the same port a controller would feed — so
+decode, binding resolution, preset letters, coalescing and the write are all the
+production path. Only the physical surface is stood in for.
+
+## Tests
+
+```bash
+npm test
+```
+
+65 tests, no dependencies, no build step, Node 18+. The AWJ path strings are asserted as
+literals because each was issued against a running simulator and answered with a value
+rather than an `E12`; if a refactor changes one, the device stops responding.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
+
+Not affiliated with Analog Way, Behringer, Akai or Elation. "LivePremier", "Aquilon",
+"X-Touch", "APC40" and "MIDICON" are their respective owners' marks.

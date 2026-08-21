@@ -1,0 +1,32 @@
+{
+  "name": "awj-surface",
+  "version": "0.1.0",
+  "description": "Map MIDI and OSC controllers onto an Analog Way LivePremier switcher, with feedback.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Stoatworks Labs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node hosts/node/server.js",
+    "test": "node --test test/*.test.js",
+    "catalogue": "node tools/gen-catalogue.mjs",
+    "profiles": "node tools/gen-profiles.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "optionalDependencies": {},
+  "keywords": [
+    "analog-way",
+    "livepremier",
+    "aquilon",
+    "awj",
+    "midi",
+    "osc",
+    "mackie-control",
+    "control-surface",
+    "video",
+    "broadcast"
+  ]
+}

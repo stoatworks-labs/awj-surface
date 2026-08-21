@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>awj-surface</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <h1>awj&#8209;surface</h1>
+  <div class="status" id="status">
+    <span class="dot" id="dot-awj"></span><span id="lbl-device">connecting</span>
+    <span class="dot" id="dot-midi"></span><span id="lbl-midi">MIDI</span>
+    <span class="dot" id="dot-osc"></span><span id="lbl-osc">OSC</span>
+  </div>
+  <label class="field">
+    Profile
+    <select id="profile"></select>
+  </label>
+</header>
+
+<nav id="selection">
+  <label class="field">Screen <select id="sel-screen"></select></label>
+  <label class="field">Preset
+    <select id="sel-preset">
+      <option value="PREVIEW">PREVIEW</option>
+      <option value="PROGRAM">PROGRAM</option>
+      <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+    </select>
+  </label>
+  <label class="field">Layer <input type="number" id="sel-layer" min="1" max="128" value="1"></label>
+  <label class="field">Bank <input type="number" id="sel-bank" min="0" max="15" value="0"></label>
+  <span class="resolved" id="resolved"></span>
+</nav>
+
+<main>
+  <section id="pane-surface">
+    <h2>Surface
+      <small id="surface-kind"></small>
+    </h2>
+    <!--
+      The on-screen surface is not a simulation of the mapping: it encodes real
+      MIDI bytes and posts them to the same port a controller would use, so
+      what you see here is the actual signal path.
+    -->
+    <div id="surface"></div>
+  </section>
+
+  <section id="pane-map">
+    <h2>Mapping</h2>
+    <div class="toolbar">
+      <input type="search" id="filter" placeholder="filter controls or parameters">
+      <button id="learn-cancel" class="ghost" hidden>Cancel learn</button>
+    </div>
+    <div id="learn-banner" hidden>Move a control to bind it to <b id="learn-target"></b></div>
+    <table id="bindings">
+      <thead><tr><th>Control</th><th>Target</th><th>Layer</th><th>Value</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h3>Add a binding</h3>
+    <div class="adder">
+      <select id="add-param"></select>
+      <select id="add-layer">
+        <option value="@strip">per strip</option>
+        <option value="@selected">selected layer</option>
+      </select>
+      <select id="add-preset">
+        <option value="@selected">selected preset</option>
+        <option value="PREVIEW">PREVIEW</option>
+        <option value="PROGRAM">PROGRAM</option>
+      </select>
+      <button id="add-learn">Learn&hellip;</button>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div id="log"></div>
+</footer>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
