@@ -1,3 +1,5 @@
+> Built with AI assistance ([Claude Code](https://claude.com/claude-code)).
+
 # awj-surface
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
@@ -80,8 +82,9 @@ Sent, but not in the profile
 - **A parameter catalogue with real limits.** 67 layer parameters and 19 screen
   controls, each with the device's own type, range and enum members — generated from
   the switcher, not typed from a PDF.
-- **Two hosts, one engine.** A local server (this repo) and a Chrome extension
-  ([hosts/extension](hosts/extension)) share `core/` unchanged.
+- **Host-agnostic.** `core/` has no I/O of its own. This repo's local server is
+  one host; [LivePremier Plus](https://github.com/stoatworks-labs/livepremier-plus)
+  is another, running the same engine in a browser.
 
 ## The three things that make this harder than a lookup table
 
@@ -153,9 +156,9 @@ enough alone:
 
 - `GET /api/stores/device` — the real tree, with exact node and property names, but no
   ranges. A store dump cannot tell you that `opacity` stops at **256**.
-- `GET /app.<hash>.js` — the Web RCS bundle, which ships **unminified** with the
-  generator's own `*_ATTRIBUTES` tables: min, max, default, type, `readOnly` and the
-  enum reference for every property.
+- the application the device serves to a browser, which carries the device's own
+  published attribute tables: min, max, default, type, `readOnly` and the enum
+  reference for every property.
 
 ```bash
 node tools/gen-catalogue.mjs 192.168.2.140 > core/catalogue.json
@@ -195,14 +198,19 @@ node hosts/node/server.js --device 192.168.2.140 --profile osc-default \
 Feedback returns to the same address it arrived on, so a tablet fader tracks the
 switcher.
 
-## The Chrome extension
+## In the browser
 
-[hosts/extension](hosts/extension) drops the same engine into
-[webRCS unleashed](../webrcs-unleashed), driving the device over the page's own
-WebSocket so no extra client is opened. Web MIDI has to run in an **offscreen document**
-there — `requestMIDIAccess` is a secure-context API and a Web RCS is served over plain
-HTTP, so a content script cannot use it in either world. See that README for the full
-reasoning and the install steps.
+[LivePremier Plus](https://github.com/stoatworks-labs/livepremier-plus) vendors
+this `core/` and runs it as a MIDI Mapping panel inside the vendor's own Web RCS,
+driving the device over the page's existing WebSocket so no extra client is
+opened.
+
+That host used to be a Chrome extension, and a drop-in kit for it lived here.
+It is gone, along with the constraint that shaped it: `requestMIDIAccess` is a
+secure-context API, and a Web RCS served over plain HTTP is not a secure
+context, so an extension needed an offscreen document to reach Web MIDI at all.
+LivePremier Plus is a local proxy, so its page is served from loopback — which
+*is* a secure context — and Web MIDI is simply available.
 
 ## Running without hardware
 

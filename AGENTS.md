@@ -82,7 +82,7 @@ it is that the address a binding resolves to keeps moving.
 
 | Fact | Source |
 |---|---|
-| Parameter ranges, types, enums | the device's own `*_ATTRIBUTES` tables in its unminified Web RCS bundle |
+| Parameter ranges, types, enums | the device's own attribute tables, as served to a browser |
 | Node and property names | `GET /api/stores/device`, cross-checked simulator vs real frame (identical) |
 | AWJ framing, subscriptions, E12 | *LivePremier AWJ Protocol Programmer's Guide v4.0*, verified on the wire |
 | Preset letters and the flip | fired a take on a simulator and re-read |
@@ -112,8 +112,7 @@ serves them — never build on a sim-only path.
 
 **Not verified:** any physical control surface. No APC40, X-Touch or MIDIcon has ever
 been connected. The controller maps are transcribed from documentation and the feedback
-paths are exercised only by unit tests and the on-screen surface. The Chrome extension
-wiring in `hosts/extension/` has never been loaded into a browser.
+paths are exercised only by unit tests and the on-screen surface.
 
 **The standing rule:** work against a real Aquilon C is **read-only by default**; any
 `replace`, TAKE or memory recall needs the owner's explicit per-run permission, asked and
@@ -136,15 +135,15 @@ core/            the engine. No dependencies, no host APIs, no build step.
   coverage.js    profile-vs-reality checklist for hardware bring-up
   midi/          message codec, relative encoders, Mackie Control
 hosts/node/      local server: AWJ, OSC, HTTP+SSE, web UI
-hosts/extension/ drop-in for webrcs-unleashed (MIDI only — OSC cannot work there)
 profiles/        generated controller profiles; saved/ holds user edits
 tools/           the two generators
 ```
 
 ## Related work in this fleet
 
-- **webrcs-unleashed** — the Chrome extension this plugs into. Do not edit that repo
-  from here; `hosts/extension/` is a copy-in kit.
+- **livepremier-plus** — a local proxy that vendors this `core/` and runs it in
+  the browser as a MIDI Mapping panel. It syncs from here; do not edit the copy
+  there. OSC cannot work in that host (no UDP in a browser) — it is server-only.
 - **webrcs-timeline** — cue-stack sequencing for the same platform, Rust.
 - **aquilon-vpu-map** — reads the VPU allocation over AWJ, read-only.
 - **openrcs** — the *older* LiveCore/Midra platform. Different protocol entirely
