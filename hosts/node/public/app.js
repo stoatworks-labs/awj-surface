@@ -76,6 +76,14 @@ function listen() {
         if (msg.profile) { state.profile = msg.profile; renderAll(); }
         renderLearn();
         break;
+      case 'midi-in':
+        /* Only while the tab is open, and throttled: a fader sweep is
+           hundreds of messages a second and the table need not chase it. */
+        if (!$('tab-monitor').hidden) scheduleCoverage();
+        break;
+      case 'coverage-reset':
+        if (!$('tab-monitor').hidden) renderCoverage();
+        break;
       case 'osc-in':
         appendLog({ level: msg.mapped ? 'info' : 'warn', message: `OSC ${msg.address} ${JSON.stringify(msg.args)}${msg.mapped ? '' : ' (unmapped)'}` });
         break;
@@ -188,6 +196,12 @@ function appendLog({ level = 'info', message }) {
   $('log').parentElement.scrollTop = $('log').parentElement.scrollHeight;
 }
 
+let coverageTimer = null;
+function scheduleCoverage() {
+  if (coverageTimer) return;
+  coverageTimer = setTimeout(() => { coverageTimer = null; renderCoverage(); }, 400);
+}
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cssEscape = (s) => (window.CSS?.escape ? CSS.escape(s) : String(s).replace(/[^\w-]/g, '\\$&'));
 
@@ -234,5 +248,57 @@ $('add-learn').addEventListener('click', () => {
 });
 
 $('learn-cancel').addEventListener('click', () => post('/api/learn', { cancel: true }));
+
+/* ------------------------------------------------------------- bring-up */
+
+/*
+ * The coverage view answers two questions and they are different failures:
+ * a declared control that never arrives is usually a wrong number in the
+ * transcribed map, while an arriving control nobody declared is a control the
+ * manual left out.
+ */
+async function renderCoverage() {
+  const report = await (await fetch('/api/coverage')).json();
+
+  const summary = $('cov-summary');
+  summary.textContent = report.summary;
+  summary.classList.toggle('good', report.stats.missing === 0 && report.stats.declared > 0);
+  summary.classList.toggle('bad', report.stats.missing > 0);
+
+  $('cov-expected').tBodies[0].innerHTML = report.expected.length
+    ? report.expected.map((c) => `<tr>
+        <td class="mono">${esc(c.label)}<br><span style="opacity:.55">${esc(c.id)}</span></td>
+        <td class="mono">${esc(c.kind)}${c.bound ? '' : ' <span style="opacity:.5">(unbound)</span>'}</td>
+        <td class="mono">${c.seen
+          ? `<span class="hit">yes</span> &times;${c.count}`
+          : '<span class="never">never</span>'}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="3" style="color:var(--dim)">This profile declares no controls — everything will show up below.</td></tr>';
+
+  $('cov-unexpected').tBodies[0].innerHTML = report.unexpected.length
+    ? report.unexpected.map((u) => `<tr>
+        <td class="mono">${esc(u.id)}</td>
+        <td class="mono">${u.count}</td>
+        <td>${esc(u.guess?.kind ?? '?')}${u.guess?.relative ? ` <span style="opacity:.6">(${esc(u.guess.relative)})</span>` : ''}
+            <br><span style="opacity:.55;font-size:11px">${esc(u.guess?.why ?? '')}</span></td>
+      </tr>`).join('')
+    : '<tr><td colspan="3" style="color:var(--dim)">Nothing unexpected so far.</td></tr>';
+}
+
+for (const tab of document.querySelectorAll('.tab')) {
+  tab.addEventListener('click', () => {
+    for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', t === tab);
+    const monitor = tab.dataset.tab === 'monitor';
+    $('tab-monitor').hidden = !monitor;
+    $('tab-map').hidden = monitor;
+    if (monitor) renderCoverage();
+  });
+}
+
+$('cov-refresh').addEventListener('click', renderCoverage);
+$('cov-reset').addEventListener('click', async () => {
+  await post('/api/coverage/reset', {});
+  renderCoverage();
+});
 
 boot().catch((err) => appendLog({ level: 'error', message: `startup failed: ${err.message}` }));

@@ -49,7 +49,35 @@
   </section>
 
   <section id="pane-map">
-    <h2>Mapping</h2>
+    <h2>
+      <button class="tab on" data-tab="map">Mapping</button>
+      <!--
+        Bring-up. Every shipped profile was transcribed from a manual and none
+        has met its hardware, so the first job with a new surface is to touch
+        everything and see what the profile got wrong.
+      -->
+      <button class="tab" data-tab="monitor">Bring-up</button>
+    </h2>
+
+    <div id="tab-monitor" hidden>
+      <div class="toolbar">
+        <span id="cov-summary" class="cov-summary">touch every control on the surface</span>
+        <button id="cov-refresh" class="ghost">Refresh</button>
+        <button id="cov-reset" class="ghost">Start over</button>
+      </div>
+      <h3>Declared by the profile</h3>
+      <table id="cov-expected">
+        <thead><tr><th>Control</th><th>Kind</th><th>Seen</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <h3>Sent, but not in the profile</h3>
+      <table id="cov-unexpected">
+        <thead><tr><th>Control</th><th>Count</th><th>Looks like</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="tab-map">
     <div class="toolbar">
       <input type="search" id="filter" placeholder="filter controls or parameters">
       <button id="learn-cancel" class="ghost" hidden>Cancel learn</button>
@@ -73,6 +101,7 @@
         <option value="PROGRAM">PROGRAM</option>
       </select>
       <button id="add-learn">Learn&hellip;</button>
+    </div>
     </div>
   </section>
 </main>

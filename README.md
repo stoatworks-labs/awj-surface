@@ -43,6 +43,32 @@ Run it with no `--device` and everything still works offline: the mapping editor
 on-screen surface, and writes logged instead of sent. That is how you build a show file
 before the frame arrives.
 
+## Bring-up: checking a profile against real hardware
+
+Every shipped profile was transcribed from a manual, and a MIDI implementation chart is
+exactly the kind of document that is quietly wrong — a note number off by one, a channel
+that is 1-based in the manual and 0-based on the wire, an encoder that turns out to send
+notes rather than a CC.
+
+The **Bring-up** tab turns "touch everything and see" into a checklist. Plug the surface
+in, sweep every control, and it reports:
+
+- **Declared by the profile** — each control, and whether it has actually been seen.
+  Anything still `never` is usually a wrong number in the transcription.
+- **Sent, but not in the profile** — controls the manual left out, each with a guess at
+  what it is.
+
+That guess is the useful part. A sign-magnitude encoder read as a fader is the single
+most common way a transcribed profile is wrong, and it does not look wrong — it looks
+like a parameter that runs away. The classifier spots it because an encoder never sweeps:
+its values cluster either side of `0x40`.
+
+```
+Sent, but not in the profile
+  cc:3:99   x10   fader              sweeps a wide range of values — absolute
+  cc:0:80   x5    encoder (signed)   values cluster either side of 0x40 — relative
+```
+
 ## What it does
 
 - **Bidirectional.** Motorised faders track the device, LED rings follow encoders,

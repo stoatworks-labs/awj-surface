@@ -28,9 +28,11 @@ import { fileURLToPath } from 'node:url';
 import { Engine } from '../../core/engine.js';
 import { MidiSurface } from '../../core/surface.js';
 import { validate } from '../../core/profile.js';
+import { coverage, classify, summarise } from '../../core/coverage.js';
 import { toAwj, key, screenGroupParam, layerParam } from '../../core/paths.js';
 import * as catalogue from '../../core/catalogue.js';
 
+import { decode } from '../../core/midi/message.js';
 import { AwjClient } from './awj.js';
 import { DeviceStore } from './store.js';
 import { OscPort, oscControlId, oscEvent } from './osc.js';
@@ -120,6 +122,8 @@ class Host {
     this.clients = new Set();
     this.log = [];
     this.learn = null;
+    /* Bring-up: what the surface has actually sent, per control. */
+    this.seen = new Map();
     this.status = { device: null, awj: false, midi: null, osc: false, offline: !opts.device, readOnly: !!opts.readOnly };
     this.poll = null;
   }
@@ -459,10 +463,35 @@ class Host {
   onMidi(bytes) {
     const event = this.surface.handle(bytes);
     if (!event) return;
+    this.observe(event, bytes);
     this.broadcast({ type: 'midi-in', bytes: Array.from(bytes), control: event.control, kind: event.kind });
     if (this.learn) { this.finishLearn(event); return; }
     if (event.kind === 'unmapped') return;
     this.engine.input(event);
+  }
+
+  /**
+   * Record that a control moved.
+   *
+   * Kept for every control, mapped or not: the useful bring-up question is
+   * what the surface actually emits, and a profile transcribed from a manual
+   * is exactly the thing being checked. A short sample of raw messages is
+   * retained per control so an unknown one can be classified — a handful is
+   * plenty to tell a sweeping fader from a relative encoder, and keeping more
+   * would grow without bound over a show.
+   */
+  observe(event, bytes) {
+    let hit = this.seen.get(event.control);
+    if (!hit) {
+      hit = { count: 0, kind: event.kind, samples: [] };
+      this.seen.set(event.control, hit);
+    }
+    hit.count++;
+    hit.last = Date.now();
+    if (hit.samples.length < 24) {
+      const decoded = decode(bytes);
+      if (decoded) hit.samples.push({ type: decoded.type, value: decoded.value, velocity: decoded.velocity });
+    }
   }
 
   /* ---------------------------------------------------------------- OSC */
@@ -632,6 +661,16 @@ function createServer(host) {
 
       if (path === '/api/ports') return json(res, 200, await listPorts());
 
+      if (path === '/api/coverage') {
+        const report = coverage(host.engine.profile, host.seen);
+        /* Guess at what each unknown control is, so bring-up ends with
+           something you can paste into a profile rather than a list of hex. */
+        for (const item of report.unexpected) {
+          item.guess = classify(host.seen.get(item.id)?.samples ?? []);
+        }
+        return json(res, 200, { ...report, summary: summarise(report) });
+      }
+
       if (req.method === 'POST') {
         const body = await readBody(req);
         switch (path) {
@@ -642,6 +681,10 @@ function createServer(host) {
             return json(res, 200, { ok: true });
           case '/api/input':
             host.engine.input(body);
+            return json(res, 200, { ok: true });
+          case '/api/coverage/reset':
+            host.seen.clear();
+            host.broadcast({ type: 'coverage-reset' });
             return json(res, 200, { ok: true });
           case '/api/learn':
             if (body.cancel) { host.learn = null; host.broadcast({ type: 'learn', armed: false }); }

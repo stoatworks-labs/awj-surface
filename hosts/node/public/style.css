@@ -19,6 +19,15 @@
 
 * { box-sizing: border-box; }
 
+/*
+ * The chrome is pinned and only the panes scroll.
+ *
+ * `min-height: 100vh` let `main` grow to its content instead, so the whole
+ * document scrolled and the header went with it — taking the connection state
+ * and the READ-ONLY indicator off screen. On a show laptop the one question
+ * that must always be answerable is whether a control will reach the switcher,
+ * so that row can never scroll away.
+ */
 body {
   margin: 0;
   background: var(--bg);
@@ -26,8 +35,11 @@ body {
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
+
+header, nav, footer { flex: none; }
 
 h1 { font-size: 15px; margin: 0; letter-spacing: .04em; }
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim); margin: 0 0 10px; }
@@ -58,8 +70,18 @@ nav { display: flex; align-items: center; gap: 14px; background: var(--panel-2);
 .resolved { font: 11px/1 var(--mono); color: var(--dim); margin-left: auto; }
 .resolved b { color: var(--accent); font-weight: 600; }
 
-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: var(--line); flex: 1; }
-main > section { background: var(--bg); padding: 14px; overflow: auto; }
+/* `min-height: 0` is load-bearing on both: a flex/grid child defaults to
+   min-height:auto, which refuses to shrink below its content and so defeats
+   the `overflow: auto` below it. */
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--line);
+  flex: 1;
+  min-height: 0;
+}
+main > section { background: var(--bg); padding: 14px; overflow: auto; min-height: 0; }
 
 /* ---------------------------------------------------------------- surface */
 
@@ -174,3 +196,28 @@ footer { border-bottom: none; border-top: 1px solid var(--line); background: var
   font-weight: 600;
   letter-spacing: .03em;
 }
+
+/* ------------------------------------------------------------- bring-up */
+
+h2 .tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  padding: 0 0 4px;
+  margin-right: 14px;
+  cursor: pointer;
+}
+h2 .tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+
+.cov-summary { flex: 1; align-self: center; color: var(--dim); }
+.cov-summary.good { color: var(--ok); }
+.cov-summary.bad { color: var(--warn); }
+
+/* A control the profile promises and the surface has never sent is the whole
+   point of this view, so it is the only thing coloured. */
+td .never { color: var(--warn); }
+td .hit { color: var(--ok); }

@@ -63,6 +63,11 @@ it is that the address a binding resolves to keeps moving.
   the wire in that mode.
 - **Subscribing IS a write.** `Subscriptions` is set with `op: replace`. Anything
   claiming to be read-only must not subscribe; poll with `get` instead.
+- **Layout: the chrome must never scroll.** `body` is `height:100vh; overflow:hidden`
+  and both `main` and its sections carry `min-height:0` — a grid/flex child defaults to
+  `min-height:auto` and refuses to shrink below its content, which silently defeats
+  `overflow:auto` and lets the whole document scroll. That took the header, and with it
+  the READ-ONLY indicator, off screen.
 - **`null` position is not zero.** It means "no value" and a host must leave the control
   alone — blank the LED ring, do not drive it to the bottom.
 
@@ -121,6 +126,7 @@ core/            the engine. No dependencies, no host APIs, no build step.
   profile.js     profile schema and validation
   surface.js     MIDI <-> normalised control events
   engine.js      bindings, selection, writes, feedback
+  coverage.js    profile-vs-reality checklist for hardware bring-up
   midi/          message codec, relative encoders, Mackie Control
 hosts/node/      local server: AWJ, OSC, HTTP+SSE, web UI
 hosts/extension/ drop-in for webrcs-unleashed (MIDI only — OSC cannot work there)
