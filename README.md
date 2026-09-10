@@ -2,14 +2,23 @@
 
 # awj-surface
 
-> **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
-> (Anthropic), directed and reviewed by a human author. The parameter model and every
-> path in it were read from a live LivePremier, and the whole chain — a fader movement
-> through to an `opacity` write, a TAKE, and the preset flip that follows it — has been
-> **exercised end to end on a real Aquilon C**, with the frame captured beforehand and
-> every one of 87 values verified restored afterwards. But **no physical control surface
-> has ever been plugged into it.** The controller maps come from published documentation,
-> not from hardware. Treat a first run with a real APC40, X-Touch or MIDIcon as bring-up.
+> **AI-assisted project. Status: field testing.** This codebase was created with
+> [Claude](https://claude.com/claude-code) (Anthropic), directed and reviewed by a human
+> author. The parameter model and every path in it were read from a live LivePremier, and
+> the whole chain — a fader movement through to an `opacity` write, a TAKE, and the preset
+> flip that follows it — has been **exercised end to end on a real Aquilon C**, with the
+> frame captured beforehand and every one of 87 values verified restored afterwards.
+>
+> **The catalogue is verified against real hardware.** On 2026-09-09 the whole thing was
+> re-checked against a second Aquilon C (`NLC_C`, firmware 6.2.73): all **421 paths** the
+> catalogue generates — 86 parameters across three preset letters and two layer kinds —
+> were issued at the box and **every one answered, with no `E12`**. A layer `opacity`
+> write round-tripped and restored on that frame too. The paths are not a transcription
+> of a manual; they are what a device answers.
+>
+> But **no physical control surface has ever been plugged into it.** The controller maps
+> come from published documentation, not from hardware. Treat a first run with a real
+> APC40, X-Touch or MIDIcon as bring-up.
 
 Map MIDI and OSC controllers onto an Analog Way **LivePremier** (Aquilon) switcher.
 Faders to layer opacity, encoders to size and position, buttons to select layers, apply
@@ -230,8 +239,10 @@ npm test
 ```
 
 65 tests, no dependencies, no build step, Node 18+. The AWJ path strings are asserted as
-literals because each was issued against a running simulator and answered with a value
-rather than an `E12`; if a refactor changes one, the device stops responding.
+literals because each was issued against a device and answered with a value rather than
+an `E12`; if a refactor changes one, the device stops responding. Originally that device
+was a simulator; as of 2026-09-09 all 421 generated paths have been re-issued against a
+physical Aquilon C on firmware 6.2.73 and answered there too.
 
 ## Licence
 
