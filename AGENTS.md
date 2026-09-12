@@ -46,7 +46,14 @@ it is that the address a binding resolves to keeps moving.
   and is deaf.
 - **AWJ is leaf-read-only.** Every container read returns `{}`. You cannot enumerate the
   object model over it — which is why `tools/gen-catalogue.mjs` takes the model from the
-  Web RCS bundle and the store dump instead.
+  Web RCS bundle and the store dump instead. It reads both bundle shapes — LivePremier's
+  unminified `const X_ATTRIBUTES = {…}` and Midra/Alta's minified
+  `n.d(t,"X_ATTRIBUTES",…)` with the object bound to a one-letter local — and both store
+  layouts (`layerList` under `screenAuxGroupList`'s screens; `liveLayerList` with the
+  take group under `transition/`). `--bundle`/`--store` generate from files captured
+  earlier, which is how the Midra catalogue was cut from a box that was mid-show.
+  ⚠️ The minifier writes `3000` as `3e3`; a mantissa-only number regex gave `takeTime`
+  a maximum of 3.
 - **`core/` must stay dependency-free and host-free.** No Node APIs, no DOM, no fetch.
   The browser imports it over `/core/…`, the server imports it directly, and the
   extension vendors it. A single `node:` import would break two of the three.
@@ -128,6 +135,10 @@ core/            the engine. No dependencies, no host APIs, no build step.
   paths.js       store <-> AWJ spelling, and the layer address
   preset.js      PREVIEW/PROGRAM -> A|B|C  (read this one first)
   catalogue.*    what is mappable and what its limits are (generated)
+  catalogue-mng.json  the same, generated from a Midra 4K / Alta 4K (a Pulse 4K,
+                 3.3.10). Not yet wired into the engine — paths.js and preset.js
+                 are LivePremier's — but consumers that speak both (livepremier-
+                 plus) vendor it from here
   value.js       scaling both ways, plus pickup
   profile.js     profile schema and validation
   surface.js     MIDI <-> normalised control events

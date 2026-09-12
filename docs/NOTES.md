@@ -48,3 +48,21 @@ ones, and classifies a sign-magnitude encoder (values clustering either side of
 **Tidy-up outstanding:** the README carries **two** AI disclaimers — a one-line
 "Built with AI assistance" above the proper blockquote. Convention is one, at the top
 (**disclaimer scope** (working-practice note, kept in Claude memory)).
+
+## A second catalogue: Midra 4K / Alta 4K (2026-09-12)
+
+`core/catalogue-mng.json` — 57 layer parameters in 14 groups and 11 take-group
+ones, generated from a **live Pulse 4K's** bundle and store (firmware 3.3.10, read
+once, read-only, mid-show) with `--bundle`/`--store`. Zero `inferred`: every
+property matched a table by signature. The LivePremier catalogue regenerates
+byte-identically apart from three new descriptive fields (`platform`, `layerRoot`,
+`groupRoot`), which say where a layer and the take group live relative to a
+destination so a consumer need not know the platform by name.
+
+What the generator had to learn: the minified export shape, `readOnly:!0`,
+double-quoted `type:"int"`, enums scattered as `NAME:{key:"NAME",…}` rather than one
+`VAR_ENUMS` blob, and `3e3`. Nothing in the engine changed — `paths.js` and
+`preset.js` are still LivePremier's, so the MIDI mapper does not yet drive a Midra.
+livepremier-plus vendors the JSON for its Layer panel, where `core/dialect.js`
+supplies the roots.
+

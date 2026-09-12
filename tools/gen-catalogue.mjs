@@ -1,26 +1,57 @@
 /*
- * Generate core/catalogue.json from a live LivePremier (or the simulator).
+ * Generate core/catalogue.json from a live LivePremier (or the simulator) —
+ * or core/catalogue-mng.json from a Midra 4K / Alta 4K.
  *
  * Two sources are joined, because neither is sufficient alone:
  *
  *   GET /api/stores/device   the real tree. Gives exact node names, exact prop
  *                            names and a current value, but no ranges — a store
  *                            dump cannot tell you that opacity stops at 256.
- *   GET /app.<hash>.js       the Web RCS bundle, which ships unminified with the
- *                            generator's own `*_ATTRIBUTES` tables: min, max,
- *                            default, type, readOnly and the enum reference for
- *                            every property. This is where ranges come from.
+ *   GET /app.<hash>.js       the Web RCS bundle, which carries the generator's
+ *                            own `*_ATTRIBUTES` tables: min, max, default,
+ *                            type, readOnly and the enum reference for every
+ *                            property. This is where ranges come from.
  *
  * Nothing here is hand-written from documentation. If a range is in the output,
  * the device's own front-end bundle said so.
  *
  *   node tools/gen-catalogue.mjs [host] [> core/catalogue.json]
+ *   node tools/gen-catalogue.mjs --bundle app.js --store store.json
  *
- * Defaults to 127.0.0.1:3000, i.e. the AW LivePremier Simulator.
+ * Defaults to 127.0.0.1:3000, i.e. the AW LivePremier Simulator. The file form
+ * reads a bundle and a store already captured — the way a box read once, mid-
+ * show, can be turned into a catalogue afterwards without going back to it.
+ *
+ * ## Two bundles, two spellings of the same tables
+ *
+ * LivePremier's bundle ships unminified: `const OPACITY_ATTRIBUTES = { PP: {
+ * opacity: { min: 0, max: 256, type: 'int', ... } } }` and one
+ * `const VAR_ENUMS = {...}` blob. Midra 4K / Alta 4K ship the same tables
+ * minified: the name survives only in the module's export,
+ * `n.d(t,"OPACITY_ATTRIBUTES",(function(){return i}))`, the object follows as
+ * `const i={PP:{opacity:{min:0,max:256,type:"int",readOnly:!0,...}}}`, and
+ * the enums are scattered as `NAME:{key:"NAME",items:{...},order:[...]}`.
+ * Both are read; nothing about the output says which it came from except the
+ * `platform` field.
+ *
+ * ## Two stores, two places for a layer
+ *
+ * LivePremier keeps a layer at `screenList/items/S1/presetList/items/A/
+ * layerList/items/1` and the take group at `screenAuxGroupList/items/S1`.
+ * Midra keeps them at `screenList/items/1/presetList/items/UP/liveLayerList/
+ * items/1` and `transition/screenList/items/1`. Which layout the store has is
+ * read off the store, never off a model name.
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
-const HOST = process.argv[2] || '127.0.0.1:3000';
+const argv = process.argv.slice(2);
+const flag = (name) => {
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv[i + 1] : undefined;
+};
+const BUNDLE_FILE = flag('--bundle');
+const STORE_FILE = flag('--store');
+const HOST = argv.find((a) => !a.startsWith('--') && a !== BUNDLE_FILE && a !== STORE_FILE) || '127.0.0.1:3000';
 const base = HOST.startsWith('http') ? HOST : `http://${HOST}`;
 
 /* ------------------------------------------------------------------ bundle */
@@ -44,6 +75,10 @@ function balanced(s, i) {
 /* The bundle is ~22 MB on one line in places. Regex over the whole thing is
    fine in V8; it is BSD grep that cannot cope. */
 async function fetchBundle() {
+  if (BUNDLE_FILE) {
+    process.stderr.write(`bundle ${BUNDLE_FILE}\n`);
+    return readFileSync(BUNDLE_FILE, 'utf8');
+  }
   const index = await (await fetch(`${base}/`)).text();
   const m = index.match(/\/app\.[0-9a-f]+\.js/);
   if (!m) throw new Error('no app.<hash>.js in index.html');
@@ -62,10 +97,34 @@ async function fetchBundle() {
  */
 function attributeTables(js) {
   const out = new Map();
+  const add = (name, src) => {
+    if (!out.has(name)) out.set(name, []);
+    out.get(name).push(src);
+  };
   for (const m of js.matchAll(/const ([A-Z0-9_]+)_ATTRIBUTES\s*=\s*\{/g)) {
     const open = js.indexOf('{', m.index + m[0].length - 1);
-    if (!out.has(m[1])) out.set(m[1], []);
-    out.get(m[1]).push(balanced(js, open));
+    add(m[1], balanced(js, open));
+  }
+  /*
+   * The minified shape. The table's name is in the export declaration and its
+   * object is bound to a one-letter local somewhere after it in the same
+   * module, so the local's first `{PP:` object after the export is the table.
+   * Modules export several tables at once (`n.d(t,"A_ATTRIBUTES",…)n.d(t,
+   * "B_ATTRIBUTES",…)` then `const i={…},o={…}`), which is why the search is
+   * for the named local and not for the next object literal.
+   */
+  for (const m of js.matchAll(/n\.d\(t,"([A-Z0-9_]+)_ATTRIBUTES",\(function\(\)\{return (\w+)\}\)\)/g)) {
+    const local = m[2];
+    const decl = new RegExp(`(?:const|let|var|,)\\s*${local}=\\{`, 'g');
+    decl.lastIndex = m.index;
+    let d;
+    while ((d = decl.exec(js))) {
+      const open = js.indexOf('{', d.index + d[0].length - 1);
+      const body = balanced(js, open);
+      if (body.includes('PP:')) { add(m[1], body); break; }
+      /* Some other `i={…}` in between; keep looking, but not for ever. */
+      if (d.index - m.index > 200000) break;
+    }
   }
   return out;
 }
@@ -73,19 +132,24 @@ function attributeTables(js) {
 /** The generated VAR_ENUMS blob: every enum's members, in device order. */
 function varEnums(js) {
   const at = js.indexOf('const VAR_ENUMS={');
-  if (at < 0) throw new Error('VAR_ENUMS not found');
-  const body = balanced(js, js.indexOf('{', at));
+  /* Unminified: one blob. Minified: the same `NAME:{key:"NAME",…}` entries,
+     double-quoted, spread through the bundle — so the scan is the same, over
+     the whole file, and the key having to equal the name is what keeps it
+     from picking up anything that merely looks like one. */
+  const body = at >= 0 ? balanced(js, js.indexOf('{', at)) : js;
   const out = {};
-  for (const m of body.matchAll(/([A-Z][A-Z0-9_]*):\{key:'([A-Z0-9_]+)'/g)) {
+  for (const m of body.matchAll(/([A-Z][A-Z0-9_]*):\{key:['"]([A-Z0-9_]+)['"]/g)) {
+    if (m[1] !== m[2]) continue;
     const sub = balanced(body, body.indexOf('{', m.index));
     const order = sub.match(/order:\[([^\]]*)\]/);
     /* Prefer the explicit `order` array: it is the device's own ordering, and
        it quotes members that are not valid identifiers (PE_ASPECTOUT's '1_1'),
        which a bare key scan would drop. */
     out[m[2]] = order
-      ? order[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean)
-      : [...sub.matchAll(/'?([A-Za-z0-9_]+)'?:'([^']*)'/g)].map((x) => x[2]);
+      ? order[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean)
+      : [...sub.matchAll(/['"]?([A-Za-z0-9_]+)['"]?:['"]([^'"]*)['"]/g)].map((x) => x[2]);
   }
+  if (Object.keys(out).length === 0) throw new Error('no enums found in the bundle');
   return out;
 }
 
@@ -111,13 +175,16 @@ function parseProps(src) {
     const open = pp.indexOf('{', nameAt + m[0].length - 1);
     const body = balanced(pp, open);
     const d = { name: m[1] };
+    /* The minifier writes 3000 as `3e3` and a billion as `1e9`; reading the
+       mantissa alone gave takeTime a maximum of 3. */
     const num = (k) => {
-      const r = new RegExp(`\\b${k}:\\s*(-?\\d+)`).exec(body);
+      const r = new RegExp(`\\b${k}:\\s*(-?\\d+(?:\\.\\d+)?(?:e[+-]?\\d+)?)\\b`).exec(body);
       return r ? Number(r[1]) : undefined;
     };
-    d.type = (/\btype:\s*'(\w+)'/.exec(body) || [])[1];
-    d.subType = (/\bsubType:\s*'(\w+)'/.exec(body) || [])[1];
-    d.readOnly = /\breadOnly:\s*true/.test(body);
+    d.type = (/\btype:\s*['"](\w+)['"]/.exec(body) || [])[1];
+    d.subType = (/\bsubType:\s*['"](\w+)['"]/.exec(body) || [])[1];
+    /* `true` in the unminified bundle, `!0` in the minified one. */
+    d.readOnly = /\breadOnly:\s*(?:true|!0)\b/.test(body);
     d.min = num('min');
     d.max = num('max');
     d.def = num('def');
@@ -238,21 +305,70 @@ const tables = attributeTables(js);
 const enums = varEnums(js);
 process.stderr.write(`${[...tables.values()].reduce((n, l) => n + l.length, 0)} attribute tables, ${Object.keys(enums).length} enums\n`);
 
-process.stderr.write('fetching /api/stores/device (can be >100 MB)\n');
-const store = (await (await fetch(`${base}/api/stores/device`)).json()).device;
+let store;
+if (STORE_FILE) {
+  process.stderr.write(`store ${STORE_FILE}\n`);
+  store = JSON.parse(readFileSync(STORE_FILE, 'utf8')).device;
+} else {
+  process.stderr.write('fetching /api/stores/device (can be >100 MB)\n');
+  store = (await (await fetch(`${base}/api/stores/device`)).json()).device;
+}
 
-const screen = store.screenList.items.S1;
-const presetKey = Object.keys(screen.presetList.items)[0];
-const layer = screen.presetList.items[presetKey].layerList.items['1'];
+/*
+ * Which layout this store has, read off the store.
+ *
+ * `screenAuxGroupList` exists on LivePremier and nowhere else; `transition/
+ * screenList` is Midra's and Alta's. The first screen in each list is the
+ * template — its layers all have the same shape — and the take group is
+ * whatever that platform calls the node with `xTake` in it.
+ */
+let layout;
+if (store.screenAuxGroupList) {
+  const screen = store.screenList.items.S1;
+  const presetKey = Object.keys(screen.presetList.items)[0];
+  layout = {
+    platform: 'livepremier',
+    device: store.system?.deviceList?.items?.['1']?.pp?.dev ?? null,
+    firmware: store.system?.deviceList?.items?.['1']?.pp?.updater ?? null,
+    presetKeys: Object.keys(screen.presetList.items),
+    layerKeys: Object.keys(screen.presetList.items[presetKey].layerList.items).slice(0, 4).concat('…'),
+    layer: screen.presetList.items[presetKey].layerList.items['1'],
+    /* The store spelling of where a layer and the take group live, relative to
+       a destination, so a consumer can address them without knowing the
+       platform by name. */
+    layerRoot: ['presetList', 'items', '<preset>', 'layerList', 'items', '<layer>'],
+    groupRoot: ['screenAuxGroupList', 'items', '<destination>'],
+    group: store.screenAuxGroupList.items.S1
+  };
+} else if (store.transition?.screenList) {
+  const screen = store.screenList.items['1'];
+  const presetKey = Object.keys(screen.presetList.items)[0];
+  layout = {
+    platform: 'midra',
+    device: store.system?.pp?.dev ?? null,
+    firmware: store.system?.version?.pp?.updater ?? null,
+    presetKeys: Object.keys(screen.presetList.items),
+    layerKeys: Object.keys(screen.presetList.items[presetKey].liveLayerList.items),
+    layer: screen.presetList.items[presetKey].liveLayerList.items['1'],
+    layerRoot: ['presetList', 'items', '<preset>', 'liveLayerList', 'items', '<layer>'],
+    groupRoot: ['transition', 'screenList', 'items', '<destination>'],
+    group: store.transition.screenList.items['1']
+  };
+} else {
+  throw new Error('this store has neither screenAuxGroupList nor transition/screenList — not a Web RCS store this tool knows');
+}
 
 const catalogue = {
-  generatedFrom: base,
-  device: store.system?.deviceList?.items?.['1']?.pp?.dev ?? null,
-  firmware: store.system?.deviceList?.items?.['1']?.pp?.updater ?? null,
-  presetKeys: Object.keys(screen.presetList.items),
-  layerKeys: Object.keys(screen.presetList.items[presetKey].layerList.items).slice(0, 4).concat('…'),
-  layer: walk(layer, tables, enums),
-  screenGroup: walk(store.screenAuxGroupList.items.S1, tables, enums),
+  generatedFrom: STORE_FILE ? `file:${STORE_FILE}` : base,
+  platform: layout.platform,
+  device: layout.device,
+  firmware: layout.firmware,
+  presetKeys: layout.presetKeys,
+  layerKeys: layout.layerKeys,
+  layerRoot: layout.layerRoot,
+  groupRoot: layout.groupRoot,
+  layer: walk(layout.layer, tables, enums),
+  screenGroup: walk(layout.group, tables, enums),
   enums: {}
 };
 for (const p of catalogue.layer.concat(catalogue.screenGroup)) {
