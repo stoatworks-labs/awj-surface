@@ -11,6 +11,8 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { speedEditorControls } from '../core/hid/surface.js';
+import { VENDOR_ID, PRODUCT_ID } from '../core/hid/speed-editor.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'profiles');
@@ -477,6 +479,63 @@ function osc() {
 /* An empty surface. Everything arrives as `unmapped` and MIDI-learn fills it
    in, which is the only honest starting point for a controller whose map is
    not published. */
+/* ------------------------------------- Blackmagic DaVinci Resolve Speed Editor */
+
+/*
+ * Not MIDI: a USB/Bluetooth HID panel, driven through core/hid/. Its keys are
+ * named, not numbered, and carry an edit suite's legends, so each binding
+ * gets a label saying what it does here. Nine CAM keys with lamps are the
+ * obvious source bus; the wheel's three faces are chosen with JOG / SHTL /
+ * SCRL, and SNAP is shift.
+ */
+function speedEditor() {
+  const controls = speedEditorControls();
+  const bindings = [];
+  const key = (name, label, target, extra = {}) =>
+    bindings.push({ control: `key:${name}`, label, target, ...extra });
+
+  for (const n of range(9)) {
+    key(`cam${n + 1}`, `Live ${n + 1}`, selectedTarget('source.inputNum'),
+      { options: { action: 'set', value: `LIVE_${n + 1}` } });
+  }
+  const layerKeys = ['smart-insert', 'append', 'ripple-owr', 'close-up', 'place-on-top', 'src-owr', 'in', 'out'];
+  layerKeys.forEach((name, i) =>
+    key(name, `Layer ${i + 1}`, { kind: 'action', action: 'selectLayer', value: i + 1 }));
+
+  key('cut', 'Cut', groupTarget('control.xCut'), { options: { action: 'trigger' } });
+  key('dis', 'Take', groupTarget('control.xTake'), { options: { action: 'trigger' } });
+  key('stop-play', 'Take', groupTarget('control.xTake'), { options: { action: 'trigger' } });
+  key('smth-cut', 'Abort', groupTarget('control.xTakeAbort'), { options: { action: 'trigger' } });
+  key('trans', 'Flip preset', { kind: 'action', action: 'selectPreset', value: 'toggle' });
+  key('snap', 'Shift', { kind: 'action', action: 'shift' });
+  key('live-owr', 'Key', selectedTarget('keying.enable'), { options: { action: 'toggle' } });
+  key('source', 'Screen S1', { kind: 'action', action: 'selectScreen', value: 'S1' });
+  key('timeline', 'Screen S2', { kind: 'action', action: 'selectScreen', value: 'S2' });
+
+  const geo = (param) => GEOMETRY.find((g) => g.param === param);
+  const wheel = (face, label, target, options, shift) =>
+    bindings.push({ control: `jog:${face}`, label, target, options, shift });
+  wheel('jog', 'Opacity', selectedTarget('opacity.opacity'), {}, false);
+  wheel('shtl', 'Position H', selectedTarget('position.posH'), { min: geo('position.posH').min, max: geo('position.posH').max }, false);
+  wheel('scrl', 'Position V', selectedTarget('position.posV'), { min: geo('position.posV').min, max: geo('position.posV').max }, false);
+  wheel('jog', 'T-bar', groupTarget('control.tbarPosition'), {}, true);
+  wheel('shtl', 'Size H', selectedTarget('position.sizeH'), { min: geo('position.sizeH').min, max: geo('position.sizeH').max }, true);
+  wheel('scrl', 'Size V', selectedTarget('position.sizeV'), { min: geo('position.sizeV').min, max: geo('position.sizeV').max }, true);
+
+  return {
+    id: 'speed-editor',
+    name: 'DaVinci Resolve Speed Editor',
+    transport: 'hid',
+    stripCount: 8,
+    match: { vendorId: VENDOR_ID, productId: PRODUCT_ID },
+    feedback: { protocol: 'speed-editor' },
+    notes: 'USB or Bluetooth HID, not MIDI: needs a browser with WebHID. The panel only talks after a handshake, which the host repeats before it lapses. Quit DaVinci Resolve first — both would hear every key and fight over the lamps. JOG / SHTL / SCRL choose what the wheel moves; SNAP is shift.',
+    verified: false,
+    controls,
+    bindings
+  };
+}
+
 const generic = () => ({
   id: 'generic-learn',
   name: 'Generic (learn everything)',
@@ -533,6 +592,7 @@ const profiles = [
     blackout: 67
   }),
   osc(),
+  speedEditor(),
   generic()
 ];
 

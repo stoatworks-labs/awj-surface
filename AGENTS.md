@@ -19,7 +19,7 @@ it is that the address a binding resolves to keeps moving.
   internal speaks store paths because they are arrays and need no escaping.
 - **A layer address contains a preset LETTER.** `A`, `B` or `C`. "Preview" is not an
   address, it is a question about device state.
-- **The engine is transport-agnostic on both sides.** MIDI, OSC and the on-screen
+- **The engine is transport-agnostic on both sides.** MIDI, OSC, HID (`core/hid/`) and the on-screen
   surface all reduce to `{control, kind: absolute|relative|button|touch, …}`. AWJ, the
   page WebSocket and offline logging all consume `{path, value}`. That is what lets one
   engine serve a Node server and a Chrome extension.

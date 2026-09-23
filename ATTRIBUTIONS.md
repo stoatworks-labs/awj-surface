@@ -23,6 +23,16 @@ numbers:
 - **Akai APC40** — from Akai's published communications documentation.
 - **JLCooper MIDIcon 2 / Pro** — from JLCooper's published documentation.
 
+- **Blackmagic DaVinci Resolve Speed Editor** — not documented by Blackmagic.
+  `core/hid/` reimplements two open-source works. The authentication, report
+  formats and jog modes come from Sylvain Munaut's reverse engineering,
+  [blackmagic-misc](https://github.com/smunaut/blackmagic-misc) `bmd.py`
+  (Apache-2.0, © 2021 Sylvain Munaut). The key and lamp tables were checked
+  against Julian Waller's
+  [node-blackmagic-controller](https://github.com/Julusian/node-blackmagic-controller)
+  (MIT, © 2024 Julian Waller). The auth tests use vectors produced by running
+  `bmd.py` itself.
+
 No manufacturer firmware, software or documentation is redistributed. A profile
 is a list of numbers describing what a controller sends, written here in its
 own words.

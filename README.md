@@ -124,6 +124,7 @@ bindings use pickup: no write until the control crosses the value it is steering
 | `apc40` | Akai APC40 | button LED colours, knob rings | published APC40 chart |
 | `midicon-pro` | Elation MIDICON PRO | motor faders, button LEDs | [Elation's manual](https://cdb.s3.amazonaws.com/ItemRelatedFiles/9908/ELATION%20MIDICON%20PRO%20-%20USER%20MANUAL.pdf) |
 | `midicon-2` | Elation MIDICON-2 | motor faders, button LEDs | [Elation's manual](http://cdb.s3.amazonaws.com/ItemRelatedFiles/10522/elation_midicon-2_user_manual_010517.pdf) |
+| `speed-editor` | Blackmagic DaVinci Resolve Speed Editor (USB/Bluetooth **HID**) | key lamps, jog-mode lamps | reverse-engineered: [smunaut/blackmagic-misc](https://github.com/smunaut/blackmagic-misc), [node-blackmagic-controller](https://github.com/Julusian/node-blackmagic-controller) |
 | `osc-default` | TouchOSC and similar | values returned on the same address | — |
 | `generic-learn` | anything | as declared | learned |
 
@@ -131,6 +132,16 @@ Both MIDIcons send **one note per rotary click** rather than a relative CC, so e
 rotary is two controls in its profile. Both take feedback by echo — send a fader's own
 CC back and the motor moves — which is the same `generic` protocol the APC40 uses for
 its LEDs.
+
+The **Speed Editor is not MIDI.** It is an HID device that says nothing until the host
+answers a challenge, and it wants that answer again every few minutes. `core/hid/` has the
+protocol (`speed-editor.js`: auth, report decoding, LED reports) and the adapter
+(`surface.js`: `SpeedEditorSurface`, the HID counterpart of `MidiSurface`). Both are bytes
+only, with no transport. The Node host here doesn't drive the Speed Editor, because that
+would need `node-hid` and this repo has no runtime dependencies. LivePremier Plus drives it
+from the page over WebHID. Its wheel has three faces, chosen with JOG / SHTL / SCRL: the
+profile binds `jog:jog`, `jog:shtl` and `jog:scrl` separately, and SNAP is shift. Quit
+DaVinci Resolve before using it, because both would hear every key.
 
 Regenerate them with `node tools/gen-profiles.mjs`.
 
@@ -248,5 +259,5 @@ physical Aquilon C on firmware 6.2.73 and answered there too.
 
 MIT — see [LICENSE](LICENSE).
 
-Not affiliated with Analog Way, Behringer, Akai or Elation. "LivePremier", "Aquilon",
-"X-Touch", "APC40" and "MIDICON" are their respective owners' marks.
+Not affiliated with Analog Way, Behringer, Akai, Elation or Blackmagic Design. "LivePremier", "Aquilon",
+"X-Touch", "APC40", "MIDICON", "DaVinci Resolve" and "Speed Editor" are their respective owners' marks.
