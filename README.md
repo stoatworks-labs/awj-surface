@@ -255,6 +255,10 @@ an `E12`; if a refactor changes one, the device stops responding. Originally tha
 was a simulator; as of 2026-09-09 all 421 generated paths have been re-issued against a
 physical Aquilon C on firmware 6.2.73 and answered there too.
 
+<!-- attributions:start -->
+This project is built on other people's work — see [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
+<!-- attributions:end -->
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
