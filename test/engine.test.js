@@ -113,6 +113,20 @@ test('a screen-group binding writes the documented take path', async () => {
   assert.equal(writes.length, 0);
 });
 
+test('a trigger fires every time, though the device left the last one at true', async () => {
+  const { store, engine, writes } = rig();
+  engine.input({ control: 'note:0:94', kind: 'button', down: true });
+  await settle();
+  assert.equal(writes.length, 1);
+  /* The device echoes the take and leaves xTake at true, as a LivePremier does. */
+  applyWrites(store, engine, writes);
+  engine.input({ control: 'note:0:94', kind: 'button', down: false });
+  engine.input({ control: 'note:0:94', kind: 'button', down: true });
+  await settle();
+  assert.equal(writes.length, 1, 'the second TAKE was dropped as redundant');
+  assert.equal(writes[0].value, true);
+});
+
 test('nothing is written while the preset letters are unknown', async () => {
   const store = new FakeStore({});
   const engine = new Engine(store, profile, { coalesceMs: 5 });
