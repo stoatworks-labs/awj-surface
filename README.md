@@ -1,5 +1,3 @@
-> Built with AI assistance ([Claude Code](https://claude.com/claude-code)).
-
 # awj-surface
 
 > **AI-assisted project. Status: field testing.** This codebase was created with
@@ -209,7 +207,7 @@ across 128 knob positions isn't selectable by any human hand.
 ## OSC needs the server
 
 OSC is UDP. A browser can't open a UDP socket and nor can a Manifest V3 extension
-(`chrome.sockets.udp` went away with Chrome Apps). **MIDI can live in the extension; OSC
+(`chrome.sockets.udp` went away with Chrome Apps). **MIDI can live in the browser; OSC
 can't live anywhere but the local server.** There's no workaround, only a different
 host.
 

@@ -45,9 +45,9 @@ MIDI charts, which are exactly the documents that are quietly wrong — hence th
 ones, and classifies a sign-magnitude encoder (values clustering either side of
 `0x40`) that a profile has mistaken for a fader.
 
-**Tidy-up outstanding:** the README carries **two** AI disclaimers — a one-line
+**Tidied 2026-10-12:** the README carried **two** AI disclaimers — a one-line
 "Built with AI assistance" above the proper blockquote. Convention is one, at the top
-(**disclaimer scope** (working-practice note, kept in Claude memory)).
+(**disclaimer scope** (working-practice note, kept in Claude memory)), so the one-liner went.
 
 ## A second catalogue: Midra 4K / Alta 4K (2026-09-12)
 
