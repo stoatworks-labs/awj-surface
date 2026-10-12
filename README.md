@@ -250,7 +250,7 @@ production path. Only the physical surface is stood in for.
 npm test
 ```
 
-65 tests, no dependencies, no build step, Node 18+. The AWJ path strings are asserted as
+92 tests, no dependencies, no build step, Node 18+. The AWJ path strings are asserted as
 literals because each was sent to a device and answered with a value rather than an
 `E12`; if a refactor changes one, the device stops responding. Originally that device
 was a simulator; as of 2026-09-09 all 421 generated paths have been sent again to a
