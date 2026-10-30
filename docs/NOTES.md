@@ -66,3 +66,24 @@ double-quoted `type:"int"`, enums scattered as `NAME:{key:"NAME",…}` rather th
 livepremier-plus vendors the JSON for its Layer panel, where `core/dialect.js`
 supplies the roots.
 
+
+## Pages, and the LivePremier Plus desk (2026-10-30)
+
+The LivePremier Plus desk (prototype one, drawn in the private
+`stoatworks-labs/lpp-control-surface`, not built) has three big wheels that should drive
+position, then size, then crop of the selected layer. The engine had no way to say that:
+`bank` only offsets `@strip` layers and `shift` gives a control two meanings, not six. So a
+profile can now list `pages`, a binding can name one, and a `page` action (or a host's
+`engine.showPage(id)`) chooses it. A profile without pages behaves exactly as before, and
+the seven existing profiles regenerate byte-identically.
+
+One deliberate difference from shift: a binding off its page is not displayed. Shift's
+two bindings both still emit feedback (the later wins), which is an old wrinkle; a page is
+a whole face of the surface, and a screen showing a page nobody is on would be wrong.
+
+`lpp-surface-p1` is the desk's profile, generated like the rest from its keymap
+(`docs/KEYPAD.md` there): encoders on CC 16–19 and wheels on CC 20–22, two's complement,
+pushes on notes 96–99, channel 1. Its 45 keypad notes are declared and bound to nothing —
+they type Mynah words into LivePremier Plus's Console — so the Bring-up tab can still say
+which keys a new build never sent. The wheels are one count a pixel and unaccelerated,
+which nobody has felt yet. **Nothing about it has met hardware.**

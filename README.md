@@ -119,6 +119,7 @@ bindings use pickup: no write until the control crosses the value it's steering.
 | `midicon-2` | Elation MIDICON-2 | motor faders, button LEDs | [Elation's manual](http://cdb.s3.amazonaws.com/ItemRelatedFiles/10522/elation_midicon-2_user_manual_010517.pdf) |
 | `speed-editor` | Blackmagic DaVinci Resolve Speed Editor (USB/Bluetooth **HID**) | key lamps, jog-mode lamps | reverse-engineered: [smunaut/blackmagic-misc](https://github.com/smunaut/blackmagic-misc), [node-blackmagic-controller](https://github.com/Julusian/node-blackmagic-controller) |
 | `osc-default` | TouchOSC and similar | values returned on the same address | — |
+| `lpp-surface-p1` | the LivePremier Plus desk, prototype one (**not built yet**) | — | the desk's own keymap |
 | `generic-learn` | anything | as declared | learned |
 
 Both MIDIcons send **one note per rotary click** rather than a relative CC, so each
@@ -136,6 +137,13 @@ repo has no runtime dependencies. LivePremier Plus drives it from the page over 
 Its wheel has three faces, picked with JOG / SHTL / SCRL: the profile binds `jog:jog`,
 `jog:shtl` and `jog:scrl` separately, and SNAP is shift. Quit DaVinci Resolve before
 using it, because both would hear every key.
+
+`lpp-surface-p1` is for a controller that doesn't exist yet: the LivePremier Plus desk,
+whose Teensy is to send relative CCs (two's complement) from four encoders and three
+wheels, and notes from a Mynah keypad. The keypad's notes are declared so the Bring-up
+tab can say which keys have never been seen, and are bound to nothing: they type into
+LivePremier Plus's Console. Its wheels have **pages** (Position, Size, Opacity, Crop,
+Source, Border), which [docs/MAPPING.md](docs/MAPPING.md#pages) describes.
 
 Regenerate them with `node tools/gen-profiles.mjs`.
 
@@ -250,7 +258,7 @@ production path. Only the physical surface is stood in for.
 npm test
 ```
 
-92 tests, no dependencies, no build step, Node 18+. The AWJ path strings are asserted as
+108 tests, no dependencies, no build step, Node 18+. The AWJ path strings are asserted as
 literals because each was sent to a device and answered with a value rather than an
 `E12`; if a refactor changes one, the device stops responding. Originally that device
 was a simulator; as of 2026-09-09 all 421 generated paths have been sent again to a

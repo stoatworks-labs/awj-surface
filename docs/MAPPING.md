@@ -94,6 +94,7 @@ sixty-three *clockwise* as binary offset.
   "control": "cc:0:16",
   "label": "Source",        // shown on scribble strips and in the UI
   "shift": false,           // arm only when the shift modifier matches
+  "page": "position",       // arm only on this page (see Pages)
   "target": { … },
   "options": { … }
 }
@@ -101,6 +102,22 @@ sixty-three *clockwise* as binary offset.
 
 A control may carry several bindings — one `shift: true` and one `shift: false` is how
 eight knobs address sixteen things. A binding with no `shift` key is always armed.
+
+### Pages
+
+Shift gives a control two meanings; pages give it as many as the profile lists.
+
+```jsonc
+"pages": [{ "id": "position", "label": "Position" }, { "id": "size", "label": "Size" }]
+```
+
+A binding that names a `page` is armed only while that page is chosen, and one that
+names none is armed on every page. The first page is chosen to start with. A `page`
+action chooses another, and a host can choose one itself with `engine.showPage(id)`;
+either way pickup resets, as it does for a new layer, because every control has just been
+pointed at something else. Unlike shift, a binding off its page is not displayed either,
+so a ring or a screen never shows the value of a page nobody is on. Validation names a
+binding or a `page` action whose page isn't declared.
 
 ### Targets
 
@@ -138,6 +155,7 @@ editing a memory that is neither on air nor cued.
 | `selectPreset` | `value`: `"PREVIEW"`, `"PROGRAM"` or `"toggle"` |
 | `bank` | `delta`: `1` / `-1`, or `value` to set outright |
 | `shift` | held while the button is down |
+| `page` | `value`: a page id, or `delta` to step through `pages` and wrap |
 
 ### Options
 

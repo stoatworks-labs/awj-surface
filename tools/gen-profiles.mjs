@@ -536,6 +536,129 @@ function speedEditor() {
   };
 }
 
+/* ------------------------------------- LivePremier Plus control surface, P1 */
+
+/*
+ * Prototype one of the LivePremier Plus desk: four small encoders over the
+ * Stream Decks, three big wheels over a Mynah keypad, all on one Teensy 4.1
+ * as a class-compliant USB MIDI device on channel 1. Numbers from the desk's
+ * own keymap (stoatworks-labs/lpp-control-surface, docs/KEYPAD.md, generated
+ * from mechanical/layout.py). Nothing has been built: they are what the
+ * firmware is to send, not what a controller was seen to send.
+ *
+ * The keypad's 45 keys are declared and bound to nothing. They type Mynah
+ * words into LivePremier Plus's Console, which is not a parameter write and
+ * not this engine's job; declaring them still lets the Bring-up tab say which
+ * keys a new build has never sent. A big key answers on its first switch.
+ *
+ * The wheels page. On an empty command line the keypad's attribute keys
+ * choose the page, so the wheels drive position, then size, then crop of the
+ * selected layer without a word typed.
+ */
+const P1_KEYS = [
+  'Screen', 'Master', 'Source', 'Recall', 'Store', 'Clear', '-', 'Thru', '+', 'At',
+  'Aux', 'Memory', 'Size', 'Select', 'Delete', 'Oops', '7', '8', '9', 'If',
+  'Layer', 'Multiviewer', 'Position', 'Set', 'Label', 'Shift', '4', '5', '6', '%',
+  'TAKE', null, 'Opacity', 'Preview', 'Program', 'Still', '1', '2', '3', 'Please',
+  null, null, 'Category', 'Colour', 'None', 'Audio', '0', null, 'U1', null
+];
+
+function lppSurfaceP1() {
+  const controls = [];
+  const bindings = [];
+
+  P1_KEYS.forEach((label, i) => {
+    if (label) controls.push({ id: `note:0:${24 + i}`, kind: 'button', label: `Keypad ${label}` });
+  });
+
+  /* Speed is the take time both ways: a take alternates between the up and
+     the down preset, and an operator turning "speed" means the next take
+     whichever way it goes. It is in tenths of a second, and the default step
+     (a 128th of 0..3000) would be 2.3 s a click; crop's would be 512 px. These
+     encoders are accelerated, so a small step still crosses the range. */
+  const small = [
+    { label: 'Opacity', targets: [selectedTarget('opacity.opacity')], options: {} },
+    { label: 'Crop L', targets: [selectedTarget('cropping.classic.left')], options: { step: 4 } },
+    { label: 'Border', targets: [selectedTarget('border.edge.sizeH')], options: {} },
+    { label: 'Speed', targets: [groupTarget('control.takeUpTime'), groupTarget('control.takeDownTime')], options: { step: 1 } }
+  ];
+  small.forEach((use, i) => {
+    controls.push({ id: `cc:0:${16 + i}`, kind: 'encoder', relative: 'twos', label: `E${i + 1}` });
+    controls.push({ id: `note:0:${96 + i}`, kind: 'button', label: `E${i + 1} push` });
+    for (const target of use.targets) {
+      bindings.push({ control: `cc:0:${16 + i}`, label: use.label, target, options: use.options });
+      bindings.push({
+        control: `note:0:${96 + i}`, label: 'Reset', target,
+        options: { action: 'set', value: null, resetToDefault: true }
+      });
+    }
+  });
+
+  /* The wheels are 2048-count optical encoders under heavy knobs: one count is
+     one pixel, and they are not accelerated — the weight is the acceleration. */
+  const wheels = ['A', 'B', 'C'];
+  wheels.forEach((name, i) => {
+    controls.push({ id: `cc:0:${20 + i}`, kind: 'encoder', relative: 'twos', accelerate: false, label: `Wheel ${name}` });
+  });
+
+  const geo = (param) => GEOMETRY.find((g) => g.param === param) ?? {};
+  const fine = (param) => ({ min: geo(param).min, max: geo(param).max, step: 1 });
+  const pages = [
+    { id: 'position', label: 'Position', wheels: [
+      ['Position X', 'position.posH', fine('position.posH')],
+      ['Position Y', 'position.posV', fine('position.posV')]
+    ] },
+    { id: 'size', label: 'Size', wheels: [
+      ['Width', 'position.sizeH', fine('position.sizeH')],
+      ['Height', 'position.sizeV', fine('position.sizeV')],
+      /* "Both": width and height together, nine pixels of height for every
+         sixteen of width, so a 16:9 layer keeps its shape. */
+      ['Size', 'position.sizeH', { ...fine('position.sizeH'), step: 16 }],
+      ['Size', 'position.sizeV', { ...fine('position.sizeV'), step: 9 }]
+    ] },
+    { id: 'opacity', label: 'Opacity', wheels: [['Opacity', 'opacity.opacity', {}]] },
+    { id: 'crop', label: 'Crop', wheels: [
+      ['Crop L', 'cropping.classic.left', { step: 1 }],
+      ['Crop R', 'cropping.classic.right', { step: 1 }],
+      /* Top and bottom together: a letterbox, which is the crop wanted most. */
+      ['Crop T+B', 'cropping.classic.top', { step: 1 }],
+      ['Crop T+B', 'cropping.classic.bottom', { step: 1 }]
+    ] },
+    { id: 'source', label: 'Source', wheels: [['Source', 'source.inputNum', { step: 1 }]] },
+    { id: 'border', label: 'Border', wheels: [
+      ['Border W', 'border.edge.sizeH', {}],
+      ['Border H', 'border.edge.sizeV', {}],
+      ['Border opacity', 'border.edge.opacity', {}]
+    ] }
+  ];
+  for (const page of pages) {
+    let wheel = 0;
+    let last = null;
+    for (const [label, param, options] of page.wheels) {
+      /* Two rows with one label in a row share a wheel. */
+      if (last !== null && label !== last) wheel++;
+      last = label;
+      bindings.push({
+        control: `cc:0:${20 + wheel}`, page: page.id, label,
+        target: selectedTarget(param), options
+      });
+    }
+  }
+
+  return {
+    id: 'lpp-surface-p1',
+    name: 'LivePremier Plus control surface (P1)',
+    stripCount: 8,
+    match: { namePattern: 'LPP Surface' },
+    feedback: { protocol: 'generic' },
+    pages: pages.map(({ id, label }) => ({ id, label })),
+    notes: 'Prototype one of the LivePremier Plus desk, which has not been built: these are the numbers its Teensy is to send. Four encoders and three wheels send relative CCs in two\'s complement on channel 1; the keypad\'s notes are declared for bring-up and typed into LivePremier Plus\'s Console, not bound here. The wheels page: Position, Size, Opacity, Crop, Source, Border.',
+    verified: false,
+    controls,
+    bindings
+  };
+}
+
 const generic = () => ({
   id: 'generic-learn',
   name: 'Generic (learn everything)',
@@ -593,6 +716,7 @@ const profiles = [
   }),
   osc(),
   speedEditor(),
+  lppSurfaceP1(),
   generic()
 ];
 
