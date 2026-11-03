@@ -18,6 +18,8 @@ Faders to layer opacity, encoders to size and position, buttons to select layers
 sources, cycle crop modes and switch keying, with the surface following the switcher as
 well as driving it.
 
+The [project page](https://stoatworks-labs.com/software/awj-surface/) has the [user guide](https://stoatworks-labs.com/software/awj-surface/guide/).
+
 ```bash
 node hosts/node/server.js --device 192.168.2.140 --profile x-touch-mcu
 ```
